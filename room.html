@@ -4,9 +4,33 @@
     <meta charset="UTF-8">
     <link href="/src/style.css" rel="stylesheet">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Room</title>
+    <title>BBB Room</title>
 </head>
 <body>
+    <div id="room-ui" class="fixed top-4 left-4 z-50 bg-gray-700 p-4 rounded-lg text-white">
+        <div id="player-count">Players: 0</div>
+        <div id="username-display">Username: <span id="current-username">Anon</span></div>
+        <button id="leave-room-btn" class="mt-2 px-4 py-2 bg-red-600 rounded hover:bg-red-700 cursor-pointer">
+            Leave Room
+        </button>
+    </div>
     
+    <div id="chat-area" class="fixed bottom-4 right-4 w-80 h-60 bg-black/70 rounded-lg p-3 text-white overflow-hidden">
+        <div id="chat-messages" class="h-40 overflow-y-auto mb-2 text-sm"></div>
+        <input id="chat-input" type="text" placeholder="Type a message..." 
+               class="w-full px-3 py-2 bg-gray-800 rounded border-none outline-none text-white text-sm"
+               maxlength="100">
+    </div>
+
+    <div id="game-area" class="w-full h-screen relative bg-gray-700">
+    </div>
+
+    <div id="main-chat-input-area" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
+        <input id="main-chat-input" type="text" placeholder="Press Enter to chat..." 
+               class="w-[600px] px-6 py-4 bg-black/80 rounded-full border-2 border-gray-600 outline-none text-white text-center focus:border-blue-500 transition-colors duration-200 text-lg"
+               maxlength="100">
+    </div>
+
+    <script type="module" src="/src/room.ts"></script>
 </body>
 </html>

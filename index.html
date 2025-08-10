@@ -7,12 +7,46 @@
     <title>BBB</title>
   </head>
   <body>
-    <div id="app" class="flex flex-col min-h-screen w-screen">
-      <p class="text-center text-2xl text-blue-500 tracking-widest">BBB</p>
+    <div id="room-preview" class="fixed inset-0 opacity-20 pointer-events-none">
+    </div>
+
+    <div id="app" class="flex flex-col min-h-screen w-screen relative z-10">
       <div class="flex-1 flex flex-col justify-center items-center">
-        <p>Welcome to BBB!</p>
-        <input maxlength="15" class="text-center bg-[#222630] px-4 py-3 outline-none w-[280px] text-white rounded-lg border-2 transition-colors duration-100 border-solid focus:border-[#596A95] border-[#2B3040]" name="text" placeholder="Enter username" type="text"/>
-      
+        <p class="pb-6 text-2xl">Welcome to BBB!</p>
+        <p onclick="document.getElementById('remove-me').classList.remove('hidden');document.getElementById('remove-me').classList.add('absolute')" class="pb-4 text-[#FA8072] cursor-pointer">What is BBB?</p>
+        <div class="flex flex-col items-center space-y-4">
+          <input id="username-input" maxlength="15" class="text-center bg-[#222630] px-4 py-3 outline-none w-[280px] text-white rounded-lg border-2 border-solid border-[#2B3040]" name="text" placeholder="Enter username" type="text"/>
+          <button id="join-room-btn" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-lg font-semibold cursor-pointer">
+            Join Room
+          </button>
+        </div>
+        <div id="room-status" class="mt-6 text-center text-gray-400">
+          <div id="online-players">Players online: <span id="player-count">0</span></div>
+          <div id="room-activity" class="mt-2 h-6 text-sm">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="remove-me" class="hidden z-10 bg-gray-800 top-1/2 left-1/2 -translate-x-1/2 -translate-y-3/5 w-3/4 h-3/4">
+        <button onclick="document.getElementById('remove-me').classList.add('hidden');document.getElementById('remove-me').classList.remove('absolute')" class="bg-gray-700 text-red-600 right-0 ml-2 mt-2 px-3 py-1 cursor-pointer active:translate-y-0.5">X</button>
+
+      <div class="flex flex-col overflow-auto h-full w-full items-center">
+        <p class="pl-5 pr-5 pt-4 text-xl">BBB, also known as club 
+          bear, is a game made by Squiggle on the ursina game 
+          engine, this introduction of this game, club bear, was 
+          the first time networking was implemented into ursina 
+          and the second I saw it I fell in love and asked Squiggle 
+          if I could modify club bear and add improvements to it 
+          like emojis, better play area and <bold>optional</bold> 
+          swear word filter</p>
+        <p class="pl-5 pr-5 pt-6 text-xl">Ever since then whenever I try out a new thing that has 
+          networking built into it I try my best to recreate 
+          club_bear (or BBB) it's a very simple concept as you 
+          just handle multple people joining and update the 
+          positions and have a basic in-game chat</p>
+        <p class="pt-6 text-2xl text-[#FA8072]"><a target="_blank" href="https://github.com/ItsbaileyX3525/BBB/tree/0191d0b9638e267f833b4bdd88168acd3fb3ac71">BBB's source code</p></a>
+        <p class="pt-2 text-2xl text-[#FA8072]"><a target="_blank" href="https://github.com/pokepetter/ursina/blob/master/samples/networking/club_bear.py">Club bear source code</p></a>
+        <img class="h-[96%] w-full" src="/assets/GamePreview.png" alt="">
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

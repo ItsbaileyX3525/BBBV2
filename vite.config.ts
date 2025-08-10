@@ -10,6 +10,7 @@ export default defineConfig(
         rollupOptions: {
             input: {
                 main: 'index.html',
+                room: 'room.html',
                 notfound: '404.html',
                 },
             },
