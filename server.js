@@ -37,31 +37,45 @@ function getRoomStats() {
 }
 
 uWS.App()
+  .options('/*', (res, req) => {
+    // Handle preflight requests
+    res.writeHeader('Access-Control-Allow-Origin', '*');
+    res.writeHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.writeHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.writeHeader('Access-Control-Max-Age', '86400');
+    res.end();
+  })
   .get('/', (res, req) => {
     const html = fs.readFileSync(path.join(__base, 'index.html'))
-      res.writeHeader('Content-Type', 'text/html');
-      res.end(html);
+    res.writeHeader('Access-Control-Allow-Origin', '*');
+    res.writeHeader('Content-Type', 'text/html');
+    res.end(html);
   })
   .get('/room.html', (res, req) => {
     const html = fs.readFileSync(path.join(__base, 'room.html'))
+    res.writeHeader('Access-Control-Allow-Origin', '*');
     res.writeHeader('Content-Type', 'text/html');
     res.end(html);
   })
   .get('/unicode_bear.png', (res, req) => {
     const imagePath = path.join(__dirname, 'public', 'unicode_bear.png')
     if (fs.existsSync(imagePath)) {
+      res.writeHeader('Access-Control-Allow-Origin', '*');
       res.writeHeader('Content-Type', 'image/png');
       res.end(fs.readFileSync(imagePath));
     } else {
+      res.writeHeader('Access-Control-Allow-Origin', '*');
       res.writeStatus('404 Not Found').end('Image not found');
     }
   })
   .get('/sine.wav', (res, req) => {
     const imagePath = path.join(__dirname, 'public', 'sine.wav')
     if (fs.existsSync(imagePath)) {
+      res.writeHeader('Access-Control-Allow-Origin', '*');
       res.writeHeader('Content-Type', 'audio/wav');
       res.end(fs.readFileSync(imagePath));
     } else {
+      res.writeHeader('Access-Control-Allow-Origin', '*');
       res.writeStatus('404 Not Found').end('Audio file not found');
     }
   })
@@ -82,14 +96,17 @@ uWS.App()
         '.wav' : 'audio/wav'
       };
 
+      res.writeHeader('Access-Control-Allow-Origin', '*');
       res.writeHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
       res.end(fs.readFileSync(filePath))
     } else {
+      res.writeHeader('Access-Control-Allow-Origin', '*');
       res.writeStatus('404 Not Found').end('File not found')
     }
   }).any('/*', (res, req) => {
     const html = fs.readFileSync(path.join(__base, "404.html"))
     res.writeStatus('404 Not Found')
+    res.writeHeader('Access-Control-Allow-Origin', '*');
     res.writeHeader('Content-Type', 'text/html')
     res.end(html)
   })

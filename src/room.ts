@@ -3,7 +3,10 @@ import { Filter } from 'bad-words';
 import { emojiList } from './emojiList';
 import { parse } from 'node-html-parser'
 
-const socket = new WebSocket("ws://localhost:3001/room");
+const IP = localStorage.getItem('serverip') || "localhost";
+const PORT = localStorage.getItem('serverport') || "3001"
+
+const socket = new WebSocket(`ws://${IP}:${PORT}/room`);
 
 const filter = new Filter();
 
@@ -86,8 +89,6 @@ function playCachedAudioNTimes(times: number) {
     const totalDuration = cachedBuffer.duration * times;
     source.start(0);
     source.stop(audioCtx.currentTime + totalDuration);
-
-    source.onended = () => console.log("Finished");
 }
 
 function getUserAgent(){

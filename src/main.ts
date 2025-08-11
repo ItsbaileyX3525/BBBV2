@@ -1,8 +1,120 @@
 import './style.css'
 
 const previewSocket = new WebSocket("ws://localhost:3001/preview");
+/*<div class="server-item flex items-center bg-gray-800 p-3 rounded-lg">
+  <img src="/assets/Red.png" alt="server status" class="w-6 h-6 mr-3">
+  <div class="flex-1">
+    <p class="text-xl">Main server #1</p>
+  </div>
+  <button class="bg-blue-600 rounded-lg px-4 py-2 mr-2 cursor-pointer hover:bg-blue-700 active:translate-y-0.5">CONNECT</button>
+  <button class="bg-red-600 hover:bg-red-700 active:translate-y-0.5 rounded-lg px-3 py-2 cursor-pointer">REMOVE</button>
+</div>*/
 
-function setupUsernameInput() {
+function joinRoomCustom(ip: string, port: string) {
+  const username = localStorage.getItem("username");
+  const serverIP = document.getElementById('server-IP') as HTMLInputElement;
+  const serverPORT = document.getElementById('server-PORT') as HTMLInputElement;
+  
+  if (!username || username.trim() === '') {
+    alert('Please enter a username first!');
+    return;
+  }
+  if (serverIP.value.trim() && serverPORT.value.trim()) {
+    ip = serverIP.value.trim()
+    port = serverPORT.value.trim()
+  }
+  localStorage.setItem("serverip", ip)
+  localStorage.setItem("serverport", port)
+  window.location.href = '/room.html';
+}
+
+function fetchWithTimeout(url: string, options = {}, timeout: number = 5000) {
+	const controller: AbortController = new AbortController();
+	const id = setTimeout(() => controller.abort(), timeout);
+
+	return fetch(url, { ...options, signal: controller.signal })
+		.finally(() => clearTimeout(id));
+}
+
+type serverMap = {
+  [key: string]: { serverip: string, serverport: string, servername: string}
+}
+
+function addServer(ip: string, port: string, name: string): void {
+  const serverList = localStorage.getItem("savedServers") || "{}"
+  let parsedServerList: serverMap = JSON.parse(serverList)
+
+  parsedServerList[name] = {
+    "serverip" : ip,
+    "serverport" : port,
+    "servername" : name
+  }
+
+  localStorage.setItem('savedServers', JSON.stringify(parsedServerList))
+
+  //Lords blessing if this works because I just shot at this blind
+
+  const servers = document.getElementById('servers') as HTMLElement;
+
+  const divElement = document.createElement("div")
+  divElement.classList.add('server-item', 'flex', 'items-center', 'bg-gray-800', 'p-3', 'rounded-lg')
+  divElement.dataset.serverip = ip
+  divElement.dataset.serverport = port
+
+  const imageElement = document.createElement('img')
+  imageElement.classList.add('w-6', 'h-6', 'mr-3')
+  imageElement.src = '/assets/Green.png'
+
+  const flexContainer = document.createElement('div')
+  flexContainer.classList.add('flex-1')
+
+  const paragraphElement = document.createElement('p')
+  paragraphElement.classList.add('text-xl')
+  paragraphElement.textContent = name
+
+  const connectButton = document.createElement('button')
+  connectButton.classList.add('bg-blue-600', 'rounded-lg', 'px-4', 'py-2', 'mr-2', 'cursor-pointer', 'hover:bg-blue-700', 'active:translate-y-0.5')
+  connectButton.innerText = "CONNECT"
+
+  const removeButton = document.createElement('button')
+  removeButton.classList.add('bg-red-600', 'hover:bg-red-700', 'active:translate-y-0.5', 'rounded-lg', 'px-3', 'py-2', 'cursor-pointer')
+  removeButton.textContent = "REMOVE"
+
+  connectButton.addEventListener('click', () => {
+    joinRoomCustom(ip, port)
+  })
+
+  removeButton.addEventListener('click', () => {
+    const serverList = localStorage.getItem('savedServers') || null
+    if (serverList) {
+      let parsedServerList = JSON.parse(serverList)
+      delete parsedServerList[name]
+      localStorage.setItem('savedServers', JSON.stringify(parsedServerList))
+    }
+
+    divElement.remove()
+  })
+
+  flexContainer.appendChild(paragraphElement)
+
+  divElement.appendChild(imageElement)
+  divElement.appendChild(flexContainer)
+  divElement.appendChild(connectButton)
+  divElement.appendChild(removeButton)
+
+  servers.appendChild(divElement)
+
+  fetchWithTimeout(`http://${ip}:${port}`, {}, 2500)
+    .then(_response => { //Most likely means its working
+      console.log("connection found")
+      imageElement.src = '/assets/Green.png'
+    })
+    .catch(_error => {
+      imageElement.src = "/assets/Red.png" 
+    })
+}
+
+function setupUsernameInput(): void {
   const usernameInput = document.querySelector('#username-input') as HTMLInputElement;
   if (usernameInput) {
     const storedUsername = localStorage.getItem("username");
@@ -25,19 +137,54 @@ function setupUsernameInput() {
   }
 }
 
-function setupJoinRoomButton() {
+function setupJoinRoomButton(): void {
   const joinBtn = document.getElementById('join-room-btn');
   if (joinBtn) {
     joinBtn.addEventListener('click', joinRoom);
   }
 }
 
+function setupAddServerButton(): void {
+  const addServerButton = document.getElementById('add-server-button') as HTMLButtonElement;
+  const serverName = document.getElementById('added-name') as HTMLInputElement;
+  const serverIP = document.getElementById('added-ip') as HTMLInputElement;
+  const serverPORT = document.getElementById('added-port') as HTMLInputElement;
+
+  addServerButton.addEventListener('click', () => {
+    addServer(serverIP.value,serverPORT.value,serverName.value)
+  })
+}
+
+function loadCustomServers(): void {
+  let serverList = localStorage.getItem('savedServers') || null
+  if (!serverList) {
+    return;
+  }
+
+  let parsedServerList = JSON.parse(serverList) as serverMap;
+
+  for (const [_key, value] of Object.entries(parsedServerList)) {
+    addServer(value["serverip"], value["serverport"], value["servername"])
+  }
+}
+
 function joinRoom() {
   const username = localStorage.getItem("username");
+  const serverIP = document.getElementById('server-IP') as HTMLInputElement;
+  const serverPORT = document.getElementById('server-PORT') as HTMLInputElement;
+  let ip: string = "localhost";
+  let port: string = "3001";
+  
   if (!username || username.trim() === '') {
     alert('Please enter a username first!');
     return;
   }
+  if (serverIP.value.trim() && serverPORT.value.trim()) {
+    ip = serverIP.value.trim()
+    port = serverPORT.value.trim()
+  }
+  localStorage.setItem("serverip", ip)
+  localStorage.setItem("serverport", port)
   window.location.href = '/room.html';
 }
 
@@ -136,5 +283,7 @@ function addPreviewPlayer(id: number, x: number, y: number, _username: string) {
 document.addEventListener('DOMContentLoaded', async () => {
   setupUsernameInput();
   setupJoinRoomButton();
+  setupAddServerButton();
+  loadCustomServers();
   setupRoomPreview();
 });

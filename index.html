@@ -10,14 +10,44 @@
     <div id="room-preview" class="fixed inset-0 opacity-20 pointer-events-none">
     </div>
 
+    <div id="server-list" class="bg-black z-20 hidden opacity-70 w-3/4 h-3/4 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col">
+      <button onclick="document.getElementById('server-list').classList.add('hidden')" class="absolute top-2 right-2 bg-gray-700 text-red-600 px-3 py-1 rounded-lg cursor-pointer hover:bg-gray-600 active:translate-y-0.5">X</button>
+      <div class="flex-1 overflow-y-auto p-5">
+      <div id="servers" class="space-y-3 mt-7">
+        <div class="server-item flex items-center bg-gray-800 p-3 rounded-lg">
+        <img src="/assets/Green.png" alt="server status" class="w-6 h-6 mr-3">
+        <div class="flex-1">
+          <p class="text-xl">Main server #1</p>
+        </div>
+        <button class="bg-blue-600 rounded-lg px-4 py-2 mr-2 cursor-pointer hover:bg-blue-700 active:translate-y-0.5">CONNECT</button>
+        </div>
+      </div>
+      </div>
+      <div id="add-server" class="p-5 border-t border-gray-600">
+      <div class="flex gap-3 items-center">
+        <input id="added-name" class="text-center bg-gray-700 px-3 py-2 flex-1 rounded-lg" type="text" placeholder="Server name" id="new-server-name">
+        <input id="added-ip" class="text-center bg-gray-700 px-3 py-2 w-56 rounded-lg" type="text" placeholder="IP" id="new-server-ip">
+        <input id="added-port" class="text-center bg-gray-700 px-3 py-2 w-20 rounded-lg" type="text" placeholder="PORT" id="new-server-port">
+        <button id="add-server-button" class="bg-blue-600 px-6 py-2 rounded-lg active:translate-y-0.5 hover:bg-blue-700 cursor-pointer">Add Server</button>
+      </div>
+      </div>
+    </div>
+
     <div id="app" class="flex flex-col min-h-screen w-screen relative z-10">
       <div class="flex-1 flex flex-col justify-center items-center">
         <p class="pb-6 text-2xl">Welcome to BBB!</p>
         <p onclick="document.getElementById('remove-me').classList.remove('hidden');document.getElementById('remove-me').classList.add('absolute')" class="pb-4 text-[#FA8072] cursor-pointer">What is BBB?</p>
         <div class="flex flex-col items-center space-y-4">
-          <input id="username-input" maxlength="15" class="text-center bg-[#222630] px-4 py-3 outline-none w-[280px] text-white rounded-lg border-2 border-solid border-[#2B3040]" name="text" placeholder="Enter username" type="text"/>
+          <div class=flex>
+            <button onclick="document.getElementById('server-list').classList.add('absolute');document.getElementById('server-list').classList.remove('hidden')" class="cursor-pointer"><img class="w-16 h-16 pr-3" src="/assets/server.svg" alt="server button"></button>
+            <input id="username-input" maxlength="15" class="mr-18 text-center bg-[#222630] px-4 py-3 outline-none w-[280px] text-white rounded-lg border-2 border-solid border-[#2B3040]" name="text" placeholder="Enter username" type="text"/>
+          </div>
+          <div class="flex">
+            <input id="server-IP" type="text" placeholder="ip" class="text-center bg-[#222630] px-4 h-[40px] py-3 outline-none w-[160px] text-white rounded-lg border-2 border-solid border-[#2B3040]">
+            <input id="server-PORT" type="text" placeholder="port" class="text-center bg-[#222630] px-4 h-[40px] py-3 outline-none w-[160px] text-white rounded-lg border-2 border-solid border-[#2B3040]">
+          </div>
           <button id="join-room-btn" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-lg font-semibold cursor-pointer">
-            Join Room
+            Connect
           </button>
         </div>
         <div id="room-status" class="mt-6 text-center text-gray-400">

@@ -2,13 +2,13 @@
 
 BBB client uses UWebSocket.js to create a webserver where people can join and say hi to each other, the functionality of the app are limited to joining a room, speaking to people and that's it really.
 
-### Why BBB?
+## Why BBB?
 
 Well if your asking why BBB is called that then I can't answer because I don't know, perhaps it's Bailey's baked beans but IDK.
 
 If your asking why I made BBB then its because back in my early days of programming A online dude called "Squiggle" created a networking script for ursina and some examples with it, one of those examples was called "club_bear" which I now adapt into every application that has networking for a fun little project. This time it's html and typescript using the Uws.js.
 
-### What is UWS?
+## What is UWS?
 
 UWS (UWebSocket.js) is a library created by some awesome people online that replaces the websocket library that the browser normally uses for a much more efficent and effctive networking solution that is used by discord and (I think) Trello to serve millions of people. For this project it really is overkill but I love performace!
 
@@ -16,18 +16,19 @@ The downside to all this performance is that you have to manually do a lot of th
 
 ## Features
 
- - [ ] Back-end
+ - [x] Back-end
     - [x] Client connections
     - [x] Handle client messages
     - [x] Handle disconnects
-    - [ ] Handle malformed data
-    - [ ] Support joining custom servers
- - [ ] Front-end
-    - [ ] Index page
+    - [x] Handle malformed data
+    - [x] Support joining custom servers
+ - [x] Front-end
+    - [x] Index page
         - [x] Join room
         - [x] Set username
         - [x] See live preview
-        - [ ] Custom server input
+        - [x] Custom server input
+        - [x] Save custom servers to a list
     - [x] 404 page
         - [x] 404 image
         - [x] Redirection
@@ -43,4 +44,8 @@ The downside to all this performance is that you have to manually do a lot of th
         - [x] Noramlise speed
         - [x] Censor messages
         - [x] Discord-like emoji support
-        - [ ] Add more emojis (optional)
+        - [x] Add more emojis (optional)
+
+## I want more features!!!
+
+Don't hesitate to add me on discord 'sirfrogster55' and suggest some ideas and I will implement them!
