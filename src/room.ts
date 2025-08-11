@@ -1,19 +1,27 @@
 import './style.css'
+import { Filter } from 'bad-words';
+import { emojiList } from './emojiList';
+import { parse } from 'node-html-parser'
 
 const socket = new WebSocket("ws://localhost:3001/room");
 
-let isMoving = false;
-let playerX = 200;
-let playerY = 200;
-const keysPressed: Set<string> = new Set();
-const baseMovementSpeed = 500;
-let lastFrameTime = performance.now();
+const filter = new Filter();
 
-let targetX = 200;
-let targetY = 200;
-let currentX = 200;
-let currentY = 200;
-const lerpSpeed = 0.25;
+const profanityCheckbox = document.getElementById('profanity-checkbox') as HTMLInputElement;
+const emojiRegex = /\p{Extended_Pictographic}/u;
+
+let isMoving: boolean = false;
+let playerX: number = 200;
+let playerY: number = 200;
+const keysPressed: Set<string> = new Set();
+const baseMovementSpeed: number = 500;
+let lastFrameTime: DOMHighResTimeStamp = performance.now();
+
+let targetX: number = 200;
+let targetY: number = 200;
+let currentX: number = 200;
+let currentY: number = 200;
+const lerpSpeed: number = 0.25;
 
 let lastDirection = 'right';
 
@@ -28,9 +36,9 @@ function lerp(start: number, end: number, factor: number): number {
     return start + (end - start) * factor;
 }
 
-const BASE_WIDTH = 1920;
-const BASE_HEIGHT = 1080;
-const PLAYER_SIZE = 40 * 2.5;
+const BASE_WIDTH: number = 1920;
+const BASE_HEIGHT: number = 1080;
+const PLAYER_SIZE: number = 40 * 2.5;
 
 let cachedBuffer: AudioBuffer | null = null;
 let audioCtx: AudioContext | null = null;
@@ -58,18 +66,28 @@ async function loadAudio(url: string) {
 }
 
 function playCachedAudioNTimes(times: number) {
-	if (!cachedBuffer || !audioCtx) return;
+    if (!cachedBuffer || !audioCtx) return;
 
-	const source = audioCtx.createBufferSource();
-	source.buffer = cachedBuffer;
-	source.loop = true;
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
 
-	const totalDuration = cachedBuffer.duration * times;
-	source.connect(audioCtx.destination);
-	source.start(0);
-	source.stop(audioCtx.currentTime + totalDuration);
+    const source = audioCtx.createBufferSource();
+    source.buffer = cachedBuffer;
+    source.loop = true;
 
-	source.onended = () => console.log("Finished");
+    const gainNode = audioCtx.createGain();
+    
+    gainNode.gain.setValueAtTime(0.45, audioCtx.currentTime);
+    
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    const totalDuration = cachedBuffer.duration * times;
+    source.start(0);
+    source.stop(audioCtx.currentTime + totalDuration);
+
+    source.onended = () => console.log("Finished");
 }
 
 function getUserAgent(){
@@ -93,6 +111,39 @@ function getUserAgent(){
     }
 }
 
+// Determental security risk if this didn't exist... Still not convinced its good enough tho.
+function sanitizeAllowImg(input: string): string {
+	const root = parse(input);
+
+	root.querySelectorAll('*').forEach((el) => {
+		if (el.tagName.toLowerCase() !== 'img') {
+			el.replaceWith(el.innerHTML);
+		}
+	});
+
+	root.querySelectorAll('img').forEach((img) => {
+		const src = img.getAttribute('src') || '';
+
+		if (!/^(https?:|data:image\/|\/|\.{0,2}\/|[a-zA-Z0-9_\-])/.test(src) || /^javascript:/i.test(src)) {
+			img.remove();
+			return;
+		}
+
+		Object.keys(img.attributes).forEach((attr) => {
+			if (!['src', 'alt', 'title', "class"].includes(attr.toLowerCase())) {
+				img.removeAttribute(attr);
+			}
+		});
+	});
+
+	return root.toString();
+}
+
+function isSingleEmoji(str: string): boolean {
+	const seg = [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(str)];
+	return seg.length === 1 && emojiRegex.test(str);
+};
+
 function initializeRoom() {
     const username = localStorage.getItem("username") || "Anon";
     document.getElementById('current-username')!.textContent = username;
@@ -113,25 +164,26 @@ function updateAllPlayersOnResize() {
 }
 
 function setupChat() {
-    const chatInput = document.getElementById('chat-input') as HTMLInputElement;
     const mainChatInput = document.getElementById('main-chat-input') as HTMLInputElement;
-    
-    chatInput.addEventListener('keypress', (event) => {
-        if (event.key === 'Enter' && chatInput.value.trim()) {
-            const message = chatInput.value.trim();
-            socket.send(encodeMessage('chatMessage', {
-                message: message,
-                username: localStorage.getItem("username") || "Anon"
-            }));
-            chatInput.value = '';
-        }
-    });
 
     mainChatInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter' && mainChatInput.value.trim()) {
-            const message = mainChatInput.value.trim();
+            let message: string = mainChatInput.value.trim();
+            let messageSplit = message.split(" ")
+            let reconstructedMessage: string = ""
+            for (let e of messageSplit) {
+                if (emojiList[e]) {
+                    e = emojiList[e]
+                }
+                if (!isSingleEmoji(e) && e.startsWith('/assets/')) { //Screw whoever be putting /assets/ in their message
+                    e = `<img class='max-w-[24px] max-h-[24px]' src='${e}' alt='emoji'>` //pls dont change the class UwU
+                }
+
+                reconstructedMessage += ` ${e}`
+            }
+            
             socket.send(encodeMessage('chatMessage', {
-                message: message,
+                message: reconstructedMessage.trimStart().trimEnd(),
                 username: localStorage.getItem("username") || "Anon"
             }));
             mainChatInput.value = '';
@@ -226,6 +278,13 @@ function setupMovement() {
         if (currentPlayerDiv) {
             currentPlayerDiv.style.left = `${localPos.x - PLAYER_SIZE/2}px`;
             currentPlayerDiv.style.top = `${localPos.y - PLAYER_SIZE/2}px`;
+            
+            if (window.userID !== undefined) {
+                const messageBubble = document.querySelector(`.message-bubble[data-player-id="${window.userID}"]`) as any;
+                if (messageBubble && messageBubble.updatePosition) {
+                    messageBubble.updatePosition();
+                }
+            }
         }
 
         if (moved && !isMoving) {
@@ -270,33 +329,72 @@ function addChatMessage(username: string, message: string) {
 
 function showMessageAbovePlayer(playerId: number, message: string) {
     const playerDiv = document.getElementById(`player-${playerId}`);
-    if (!playerDiv) {
+    const gameArea = document.getElementById('game-area');
+    if (!playerDiv || !gameArea) {
         return;
     }
 
-    const existingBubble = playerDiv.querySelector('.message-bubble');
+    const existingBubble = gameArea.querySelector(`.message-bubble[data-player-id="${playerId}"]`);
     if (existingBubble) {
         existingBubble.remove();
     }
 
     const messageBubble = document.createElement('div');
     messageBubble.className = 'message-bubble';
-    messageBubble.textContent = message;
+    messageBubble.setAttribute('data-player-id', playerId.toString());
+    if (localStorage.getItem("childMode")) {
+        message = filter.clean(message);
+    }
+
+    message = sanitizeAllowImg(message)
+
+    messageBubble.innerHTML = message;
+    
     messageBubble.style.position = 'absolute';
-    messageBubble.style.bottom = `80px`;
-    messageBubble.style.left = '50%';
-    messageBubble.style.transform = 'translateX(-50%)';
     messageBubble.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
     messageBubble.style.color = 'white';
     messageBubble.style.padding = '10px 14px';
     messageBubble.style.borderRadius = '16px';
     messageBubble.style.fontSize = '16px';
-    messageBubble.style.whiteSpace = 'nowrap';
+    messageBubble.style.whiteSpace = 'normal';
     messageBubble.style.zIndex = '2000';
     messageBubble.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
-    messageBubble.style.maxWidth = '250px';
+    messageBubble.style.maxWidth = '400px';
     messageBubble.style.wordBreak = 'break-word';
     messageBubble.style.textAlign = 'center';
+    messageBubble.style.display = 'flex';
+    messageBubble.style.flexWrap = 'wrap';
+    messageBubble.style.alignItems = 'center';
+    messageBubble.style.justifyContent = 'center';
+    messageBubble.style.gap = '4px';
+    
+    function updateBubblePosition() {
+        const currentPlayerDiv = document.getElementById(`player-${playerId}`);
+        const currentGameArea = document.getElementById('game-area');
+        if (!currentPlayerDiv || !currentGameArea || !messageBubble.parentNode) return;
+        
+        const playerRect = currentPlayerDiv.getBoundingClientRect();
+        const gameAreaRect = currentGameArea.getBoundingClientRect();
+        
+        const playerCenterX = playerRect.left - gameAreaRect.left + playerRect.width / 2;
+        const playerTop = playerRect.top - gameAreaRect.top;
+        
+        messageBubble.style.left = `${playerCenterX}px`;
+        messageBubble.style.top = `${playerTop - 20}px`;
+        messageBubble.style.transform = 'translateX(-50%)';
+    }
+    
+    updateBubblePosition();
+    
+    (messageBubble as any).updatePosition = updateBubblePosition;
+    
+    const images = messageBubble.querySelectorAll('img');
+    images.forEach(img => {
+        img.style.maxWidth = '24px';
+        img.style.maxHeight = '24px';
+        img.style.verticalAlign = 'middle';
+        img.style.display = 'inline-block';
+    });
     
     const arrow = document.createElement('div');
     arrow.style.position = 'absolute';
@@ -310,7 +408,7 @@ function showMessageAbovePlayer(playerId: number, message: string) {
     arrow.style.borderTop = '6px solid rgba(0, 0, 0, 0.8)';
     messageBubble.appendChild(arrow);
 
-    playerDiv.appendChild(messageBubble);
+    gameArea.appendChild(messageBubble);
 
     playCachedAudioNTimes(20)
 
@@ -318,7 +416,7 @@ function showMessageAbovePlayer(playerId: number, message: string) {
         if (messageBubble.parentNode) {
             messageBubble.remove();
         }
-    }, 3000);
+    }, 5000);
 }
 
 function updatePlayerCount(count: number) {
@@ -461,6 +559,11 @@ function updateOtherPlayersPositions() {
         
         playerDiv.style.left = `${localPos.x - PLAYER_SIZE/2}px`;
         playerDiv.style.top = `${localPos.y - PLAYER_SIZE/2}px`;
+        
+        const messageBubble = document.querySelector(`.message-bubble[data-player-id="${playerId}"]`) as any;
+        if (messageBubble && messageBubble.updatePosition) {
+            messageBubble.updatePosition();
+        }
     });
 }
 
@@ -528,9 +631,69 @@ declare global {
     }
 }
 
+function toggleEmojiMenu(): void {
+    const emojiMenu = document.getElementById('emoji-list') as HTMLElement;
+
+    if (emojiMenu.classList.contains('hidden')) {
+        emojiMenu.classList.remove('hidden')
+        emojiMenu.classList.add('absolute')
+    } else {
+        emojiMenu.classList.remove('absolute')
+        emojiMenu.classList.add('hidden')
+    }
+}
+
+function appendEmoji(tag: string): void {
+    const mainChatInput = document.getElementById('main-chat-input') as HTMLInputElement;
+
+    mainChatInput.value = mainChatInput.value.trimEnd() + " " + tag
+}
+
+//Purely helper on rizz
+function loadEmojis(): void {
+    let emojiRows = document.getElementById('emojis')
+    for (const [key, value] of Object.entries(emojiList)) {
+        if (isSingleEmoji(value)) {
+            continue
+        }
+
+
+        const image = document.createElement('img') as HTMLImageElement;
+        image.src = value
+        image.alt = "Emoji"
+
+        image.classList.add('w-12', 'h-12', 'ml-4', 'cursor-pointer')
+
+        image.onclick = () => {appendEmoji(key)}
+
+        if (emojiRows) {
+            emojiRows.appendChild(image)
+        }
+        
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     initializeRoom()
 	const cache = await caches.open('audio-cache-v1');
 	await cache.add('/sine.wav');
     await loadAudio("/sine.wav")
+    if (localStorage.getItem("childMode")) {
+        profanityCheckbox.checked = true
+    } else{ 
+        profanityCheckbox.checked = false
+    }
+    
+    profanityCheckbox.addEventListener('change', () => {
+        if (localStorage.getItem("childMode")) {
+            localStorage.removeItem("childMode")
+        } else {
+            localStorage.setItem("childMode", "ThisValueCanBeWhateverIWantItToBe")
+        }
+        
+    })
+    loadEmojis()
+
 });
+
+(window as any).toggleEmojiMenu = toggleEmojiMenu

@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.11",
+    "bad-words": "^4.0.0",
+    "node-html-parser": "^7.0.1",
     "tailwindcss": "^4.1.11",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0"
   }

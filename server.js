@@ -150,7 +150,7 @@ uWS.App()
       
       if (data.type == "chatMessage") {
         const username = data.message.username || ws.userData.username;
-        if (data.message.message.length < 128) {
+        if (data.message.message.length < 512) {
           for (const client of roomClients) {
             client.send(encodeMessage('chatMessage', { 
               message: data.message.message.trim(), 

@@ -41,5 +41,6 @@ The downside to all this performance is that you have to manually do a lot of th
         - [x] Display messages
         - [x] Support different resolutions
         - [x] Noramlise speed
-        - [ ] Censor messages
-        - [ ] Discord-like emoji support
+        - [x] Censor messages
+        - [x] Discord-like emoji support
+        - [ ] Add more emojis (optional)
