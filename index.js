@@ -7,6 +7,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const __base = path.join(__dirname, "/dist")
 
+const port = process.env.PORT || process.env.WEBSITES_PORT || 3001;
+
 const roomClients = new Set()
 const previewClients = new Set()
 
@@ -36,7 +38,7 @@ function getRoomStats() {
     }
 }
 
-uWS.App()
+const app = uWS.App()
   .options('/*', (res, req) => {
     // Handle preflight requests
     res.writeHeader('Access-Control-Allow-Origin', '*');
@@ -241,10 +243,11 @@ uWS.App()
     }
   })
 
-  .listen(3001, (token) => {
-    if (token) {
-      console.log("Listening on http://localhost:3001")
-    } else {
-      console.log("Failed to start server on port 3001")
-    }
-  });
+app.listen('0.0.0.0', port, (token) => {
+  if (token) {
+    console.log(`Server listening on http://0.0.0.0:${port}`)
+  } else {
+    console.log(`Failed to start server on port ${port}`)
+    process.exit(1)
+  }
+});
