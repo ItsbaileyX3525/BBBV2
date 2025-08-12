@@ -8,13 +8,50 @@ const PORT = localStorage.getItem('serverport') || "3001"
 
 let socket: WebSocket
 
-if (PORT === "443") {
-    socket = new WebSocket(`wss://${IP}/room`);
-} else {
-    socket = new WebSocket(`ws://${IP}:${PORT}/room`);
+function deletePlayers(): void {
+    const gameArea = document.getElementById('game-area') as HTMLElement;
+    var children = gameArea.children
+
+    for (var i = 0; i < children.length; i++) {
+        var child = children[i]
+
+        child.remove()
+    }
 }
 
+function connect() {
+    if (PORT === "443") {
+        socket = new WebSocket(`wss://${IP}/room`);
+    } else {
+        socket = new WebSocket(`ws://${IP}:${PORT}/room`);
+    }
 
+    socket.onopen = () => {
+        socket.send(encodeMessage("joinRoom", { 
+            username: localStorage.getItem("username") || "Anon", 
+            message: `Hi, I've joined from ${getUserAgent()}`
+        }));
+    };
+
+    socket.onmessage = (event) => {handleMessage(event);};
+
+    socket.onclose = (event) => {
+        console.log('Disconnected, attempting to reconnect...', event);
+        if (window.userID) {
+            showMessageAbovePlayer(window.userID, "Socket failed (stupid js), reconnecting!")
+        }
+        deletePlayers()
+
+        connect()
+    };
+
+    socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        socket.close();
+    };
+}
+
+connect()
 
 const filter = new Filter();
 
@@ -435,17 +472,6 @@ function updatePlayerCount(count: number) {
         playerCountElement.textContent = `Players: ${count}`;
     }
 }
-
-socket.onopen = () => {
-    socket.send(encodeMessage("joinRoom", { 
-        username: localStorage.getItem("username") || "Anon", 
-        message: `Hi, I've joined from ${getUserAgent()}`
-    }));
-};
-
-socket.onmessage = (event) => {handleMessage(event);};
-socket.onclose = () => {console.log("Connection closed");};
-socket.onerror = (error) => {console.error("WebSocket error:", error);};
 
 function addPlayer(playerID: number, worldX: number = 200, worldY: number = 200, _colour: string = 'red', username: string = 'Player', direction: string = 'right'): void {
     const existingPlayer = document.getElementById(`player-${playerID}`);
