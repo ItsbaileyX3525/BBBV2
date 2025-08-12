@@ -174,37 +174,55 @@ const app = uWS.App()
     },
 
     message: (ws, message, isBinary) => {
-      const id = ws.userData.id
-      const data = JSON.parse(Buffer.from(message).toString());
+      const id = ws.userData.id;
+      let data;
       
-      if (data.type == "joinRoom") {
-        ws.userData.username = data.message.username || "Anon";
-        
-        for (const client of roomClients) {
-          if (client.userData.id !== id){
-            client.send(encodeMessage('joinRoom', {
-              id: id, 
-              username: ws.userData.username,
-              playerCount: roomClients.size
-            }))
-          } else {
-            client.send(encodeMessage('assignID', {
-              id: id,
-              playerCount: roomClients.size
-            }));
-            client.send(encodeMessage('updateClients', Array.from(roomClients, c => c.userData)))
-          }
-        }
-        
-        broadcastToPreviewClients('roomActivity', `${ws.userData.username} joined the room`)
-        broadcastToPreviewClients('playerCount', roomClients.size)
+      try {
+        data = JSON.parse(Buffer.from(message).toString());
+      } catch (error) {
+        console.error(`JSON parse error from client ${id}: ${error}`);
+        return;
       }
+      
+      if (!data || typeof data.type !== 'string') {
+        console.error(`Invalid message structure from client ${id}:`, data);
+        return;
+      }
+      
+      try {
+        if (data.type == "joinRoom") {
+          ws.userData.username = data.message?.username || "Anon";
+          
+          for (const client of roomClients) {
+            try {
+              if (client.userData.id !== id){
+                client.send(encodeMessage('joinRoom', {
+                  id: id, 
+                  username: ws.userData.username,
+                  playerCount: roomClients.size
+                }))
+              } else {
+                client.send(encodeMessage('assignID', {
+                  id: id,
+                  playerCount: roomClients.size
+                }));
+                client.send(encodeMessage('updateClients', Array.from(roomClients, c => c.userData)))
+              }
+            } catch (clientError) {
+              console.error(`Error sending to client ${client.userData.id}: ${clientError}`);
+              roomClients.delete(client);
+            }
+          }
+          
+          broadcastToPreviewClients('roomActivity', `${ws.userData.username} joined the room`)
+          broadcastToPreviewClients('playerCount', roomClients.size)
+        }
       
       if (data.type == "updateData") {
         try {
-          ws.userData.x = data.message.x;
-          ws.userData.y = data.message.y;
-          ws.userData.username = data.message.username
+          ws.userData.x = data.message?.x;
+          ws.userData.y = data.message?.y;
+          ws.userData.username = data.message?.username || ws.userData.username;
           
           broadcastToPreviewClients('previewPlayers', getRoomStats().players)
         } catch (error) {
@@ -213,47 +231,65 @@ const app = uWS.App()
       }
       
       if (data.type == "chatMessage") {
-        const username = data.message.username || ws.userData.username;
-        if (data.message.message.length < 512) {
-          for (const client of roomClients) {
-            client.send(encodeMessage('chatMessage', { 
-              message: data.message.message.trim(), 
-              username: username,
-              playerId: id
-            }));
+        try {
+          const username = data.message?.username || ws.userData.username;
+          if (data.message?.message && data.message.message.length < 512) {
+            for (const client of roomClients) {
+              try {
+                client.send(encodeMessage('chatMessage', { 
+                  message: data.message.message.trim(), 
+                  username: username,
+                  playerId: id
+                }));
+              } catch (clientError) {
+                console.error(`Error sending chat to client ${client.userData.id}: ${clientError}`);
+                roomClients.delete(client);
+              }
+            }
+            
+            broadcastToPreviewClients('roomActivity', `${username}: ${data.message.message.trim()}`)
           }
-          
-          broadcastToPreviewClients('roomActivity', `${username}: ${data.message.message.trim()}`)
+        } catch (error) {
+          console.error("Error handling chat message:", error);
         }
       }
       
       if (data.type == "moveMessage") {
-        for (const client of roomClients) {
-          if (client.userData.id !== id) {
-            client.send(encodeMessage("moveMessage", { 
-              id: id, 
-              x: data.message.x, 
-              y: data.message.y,
-              direction: data.message.direction
-            }))
-          } else {
-            ws.userData.x = data.message.x;
-            ws.userData.y = data.message.y;
-            if (data.message.direction) {
-              ws.userData.direction = data.message.direction;
+        try {
+          for (const client of roomClients) {
+            try {
+              if (client.userData.id !== id) {
+                client.send(encodeMessage("moveMessage", { 
+                  id: id, 
+                  x: data.message?.x, 
+                  y: data.message?.y,
+                  direction: data.message?.direction
+                }))
+              } else {
+                ws.userData.x = data.message?.x;
+                ws.userData.y = data.message?.y;
+                if (data.message?.direction) {
+                  ws.userData.direction = data.message.direction;
+                }
+              }
+            } catch (clientError) {
+              console.error(`Error sending move to client ${client.userData.id}: ${clientError}`);
+              roomClients.delete(client);
             }
           }
-        }
-        
-        if (Math.random() < 0.1) {
-          broadcastToPreviewClients('previewPlayers', getRoomStats().players)
+          
+          if (Math.random() < 0.1) {
+            broadcastToPreviewClients('previewPlayers', getRoomStats().players)
+          }
+        } catch (error) {
+          console.error("Error handling move message:", error);
         }
         return;
       }
       
       if (data.type == "ping") {
         try {
-          ws.send(encodeMessage('pong', { timestamp: data.message.timestamp }));
+          ws.send(encodeMessage('pong', { timestamp: data.message?.timestamp }));
         } catch (error) {
           console.error('Error sending pong:', error);
         }
@@ -270,8 +306,11 @@ const app = uWS.App()
         ws.userData.lastPong = Date.now();
         return;
       }
-
-
+      
+      } catch (error) {
+        console.error(`Error handling message from client ${id}: ${error}`);
+        console.error(`Message type: ${data?.type}, Message:`, data);
+      }
     },
     
     close: (ws) => {

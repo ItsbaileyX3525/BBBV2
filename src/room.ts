@@ -47,42 +47,69 @@ function stopPingInterval() {
 }
 
 function connect() {
-    if (PORT === "443") {
-        socket = new WebSocket(`wss://${IP}/room`);
-    } else {
-        socket = new WebSocket(`ws://${IP}:${PORT}/room`);
+    if (!IP || !PORT) {
+        console.error('Missing server IP or PORT configuration');
+        setTimeout(() => connect(), 5000);
+        return;
     }
-
-    socket.onopen = () => {
-        startPingInterval();
-        
-        socket.send(encodeMessage("joinRoom", { 
-            username: localStorage.getItem("username") || "Anon", 
-            message: `Hi, I've joined from ${getUserAgent()}`
-        }));
-    };
-
-    socket.onmessage = (event) => {handleMessage(event);};
-
-    socket.onclose = (event) => {
-        console.log('Disconnected, attempting to reconnect...', event);
-        stopPingInterval();
-        
-        if (window.userID) {
-            showMessageAbovePlayer(window.userID, "Socket failed (stupid js), reconnecting!")
+    
+    try {
+        if (PORT === "443") {
+            socket = new WebSocket(`wss://${IP}/room`);
+        } else {
+            socket = new WebSocket(`ws://${IP}:${PORT}/room`);
         }
-        deletePlayers()
 
-        setTimeout(() => {
-            connect()
-        }, 2000);
-    };
+        socket.onopen = () => {
+            console.log('Connected to server successfully');
+            startPingInterval();
+            
+            const username = localStorage.getItem("username") || "Anon";
+            const joinMessage = {
+                username: username,
+                message: `Hi, I've joined from ${getUserAgent()}`
+            };
+            
+            socket.send(encodeMessage("joinRoom", joinMessage));
+        };
 
-    socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        stopPingInterval();
-        socket.close();
-    };
+        socket.onmessage = (event) => {
+            try {
+                handleMessage(event);
+            } catch (error) {
+                console.error('Error handling message:', error);
+            }
+        };
+
+        socket.onclose = (event) => {
+            console.log('Disconnected, attempting to reconnect...', event);
+            stopPingInterval();
+            
+            if (window.userID) {
+                try {
+                    showMessageAbovePlayer(window.userID, "Socket failed (stupid js), reconnecting!");
+                } catch (error) {
+                    console.error('Error showing reconnect message:', error);
+                }
+            }
+            deletePlayers();
+
+            setTimeout(() => {
+                connect();
+            }, 2000);
+        };
+
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            stopPingInterval();
+            if (socket.readyState !== WebSocket.CLOSED) {
+                socket.close();
+            }
+        };
+    } catch (error) {
+        console.error('Error creating WebSocket connection:', error);
+        setTimeout(() => connect(), 5000);
+    }
 }
 
 connect()
@@ -707,18 +734,28 @@ const linked_functions: Record<string, (data: any) => void> = {
 };
 
 function handleMessage(data: MessageEvent) {
-    let parsedData = data.data;
-    if (typeof data.data === "string") {
-        parsedData = JSON.parse(parsedData);
-    }
-    if (parsedData.type === undefined || parsedData.message === undefined) {
-        console.log("Malformed message", data);
-        return;
-    }
-    if (linked_functions[parsedData.type]) {
-        linked_functions[parsedData.type](parsedData.message);
-    } else {
-        console.log("No handler found for type:", parsedData.type);
+    try {
+        let parsedData = data.data;
+        if (typeof data.data === "string") {
+            parsedData = JSON.parse(parsedData);
+        }
+        
+        if (!parsedData || typeof parsedData.type !== 'string' || parsedData.message === undefined) {
+            console.log("Malformed message", data);
+            return;
+        }
+        
+        if (linked_functions[parsedData.type]) {
+            try {
+                linked_functions[parsedData.type](parsedData.message);
+            } catch (error) {
+                console.error(`Error handling message type ${parsedData.type}:`, error);
+            }
+        } else {
+            console.log("No handler found for type:", parsedData.type);
+        }
+    } catch (error) {
+        console.error('Error parsing message:', error, data);
     }
 }
 
