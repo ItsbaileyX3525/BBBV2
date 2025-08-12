@@ -25,6 +25,20 @@ function deletePlayers(): void {
     console.log('Cleaned up all player elements and message bubbles');
 }
 
+function cleanupStaleData(): void {
+    const gameArea = document.getElementById('game-area') as HTMLElement;
+    if (!gameArea) return;
+    
+    const messageBubbles = gameArea.querySelectorAll('.message-bubble');
+    messageBubbles.forEach(bubble => {
+        const playerId = bubble.getAttribute('data-player-id');
+        if (playerId && !document.getElementById(`player-${playerId}`)) {
+            bubble.remove();
+            console.log(`Removed stale message bubble for player ${playerId}`);
+        }
+    });
+}
+
 function startPingInterval() {
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
@@ -92,7 +106,7 @@ function connect() {
                     console.error('Error showing reconnect message:', error);
                 }
             }
-            deletePlayers();
+            
 
             setTimeout(() => {
                 connect();
@@ -102,6 +116,11 @@ function connect() {
         socket.onerror = (error) => {
             console.error('WebSocket error:', error);
             stopPingInterval();
+            
+            if (socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+                deletePlayers();
+            }
+            
             if (socket.readyState !== WebSocket.CLOSED) {
                 socket.close();
             }
@@ -275,6 +294,11 @@ function setupChat() {
 
     mainChatInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter' && mainChatInput.value.trim()) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                console.error('Socket not connected, cannot send message');
+                return;
+            }
+            
             let message: string = mainChatInput.value.trim();
             let messageSplit = message.split(" ")
             let reconstructedMessage: string = ""
@@ -289,12 +313,16 @@ function setupChat() {
                 reconstructedMessage += ` ${e}`
             }
             
-            socket.send(encodeMessage('chatMessage', {
-                message: reconstructedMessage.trimStart().trimEnd(),
-                username: localStorage.getItem("username") || "Anon"
-            }));
-            mainChatInput.value = '';
-            mainChatInput.blur();
+            try {
+                socket.send(encodeMessage('chatMessage', {
+                    message: reconstructedMessage.trimStart().trimEnd(),
+                    username: localStorage.getItem("username") || "Anon"
+                }));
+                mainChatInput.value = '';
+                mainChatInput.blur();
+            } catch (error) {
+                console.error('Error sending chat message:', error);
+            }
         }
     });
 }
@@ -400,11 +428,18 @@ function setupMovement() {
             playerX = targetX;
             playerY = targetY;
             
-            socket.send(encodeMessage('moveMessage', {
-                x: playerX,
-                y: playerY,
-                direction: lastDirection
-            }));
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(encodeMessage('moveMessage', {
+                        x: playerX,
+                        y: playerY,
+                        direction: lastDirection
+                    }));
+                } catch (error) {
+                    console.error('Error sending move message:', error);
+                }
+            }
+            
             setTimeout(() => {
                 isMoving = false;
             }, 50);
@@ -678,6 +713,8 @@ const linked_functions: Record<string, (data: any) => void> = {
         addChatMessage('System', `${data.username} left the room`);
     },
     updateClients: (data: Array<{ id: number, x: number, y: number, username: string }>) => {
+        cleanupStaleData();
+        
         for (const client of data) {
             if (client.id !== window.userID) {
                 addPlayer(client.id, client.x || 200, client.y || 200, 'green', client.username);
@@ -714,11 +751,18 @@ const linked_functions: Record<string, (data: any) => void> = {
         
         addPlayer(data.id, playerX, playerY, 'red', username);
         updatePlayerCount(data.playerCount);
-        socket.send(encodeMessage('updateData', {
-            x: playerX,
-            y: playerY,
-            username: username
-        }));
+        
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            try {
+                socket.send(encodeMessage('updateData', {
+                    x: playerX,
+                    y: playerY,
+                    username: username
+                }));
+            } catch (error) {
+                console.error('Error sending updateData:', error);
+            }
+        }
     },
     ping: (data: { timestamp: number }) => {
         if (socket && socket.readyState === WebSocket.OPEN) {
