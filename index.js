@@ -244,6 +244,12 @@ const app = uWS.App()
                   }
                 }
                 roomClients.delete(dup);
+                const dip = dup.userData.ip;
+                if (dip && ipConnectionCounts.has(dip)) {
+                  const next = (ipConnectionCounts.get(dip) || 1) - 1;
+                  if (next <= 0) ipConnectionCounts.delete(dip); else ipConnectionCounts.set(dip, next);
+                }
+                dup.userData.closed = true;
                 try { dup.end(4001, 'Replaced by new session connection'); } catch {}
                 console.log(`Replaced stale connection for session ${incomingSession} (old id ${dup.userData.id} -> new id ${ws.userData.id})`);
               } catch (dupErr) {

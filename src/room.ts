@@ -8,7 +8,7 @@ const PORT = localStorage.getItem('serverport') || __SERVER_PORT__;
 
 let socket: WebSocket
 let heartbeatInterval: NodeJS.Timeout | null = null;
-let previousUserID: number | undefined = undefined; // Track previous ID for cleanup
+let previousUserID: number | undefined = undefined;
 
 function deletePlayers(): void {
     const gameArea = document.getElementById('game-area') as HTMLElement;
@@ -39,19 +39,7 @@ function cleanupStaleData(): void {
     });
 }
 
-function startPingInterval() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-    }
-    
-    // Only use the server heartbeat system - no client-side pings
-    heartbeatInterval = setInterval(() => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            console.log(`Sending heartbeat to server at ${new Date().toLocaleTimeString()}`);
-            socket.send(JSON.stringify({ type: "hb", ts: Date.now() }));
-        }
-    }, 20000);
-}
+function startPingInterval() { /* deprecated: server handles heartbeat */ }
 
 function stopPingInterval() {
     if (heartbeatInterval) {
@@ -827,10 +815,7 @@ const linked_functions: Record<string, (data: any) => void> = {
         }
     },
     hb: (_data: { ts: number }) => {
-        console.log(`Server heartbeat received at ${new Date().toLocaleTimeString()}, responding...`);
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "hb", ts: Date.now() }));
-        }
+        // Ignore legacy hb messages
     }
 };
 
