@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const __base = path.join(__dirname, "/dist")
 
-const port = process.env.PORT || process.env.WEBSITES_PORT || 3001;
+const port = process.env.PORT || process.env.WEBSITES_PORT || 3001; //Change port to your server port
 
 const roomClients = new Set()
 const previewClients = new Set()

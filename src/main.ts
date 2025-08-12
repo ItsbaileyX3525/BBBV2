@@ -1,6 +1,16 @@
 import './style.css'
 
-const previewSocket = new WebSocket("ws://localhost:3001/preview");
+const defaultIP: string = "localhost" //Change this to your server address/ip <--- localhost for development
+const defaultPORT: string = "3001" //443 for https and whatever for anything else <--- 3001 for development
+
+let previewSocket: WebSocket
+
+if (defaultPORT === "433") {
+  previewSocket = new WebSocket(`wss://${defaultIP}/preview`);
+} else {
+  previewSocket = new WebSocket(`ws://${defaultIP}:${defaultPORT}/preview`);
+}
+
 /*<div class="server-item flex items-center bg-gray-800 p-3 rounded-lg">
   <img src="/assets/Red.png" alt="server status" class="w-6 h-6 mr-3">
   <div class="flex-1">
@@ -172,8 +182,8 @@ function joinRoom() {
   const username = localStorage.getItem("username");
   const serverIP = document.getElementById('server-IP') as HTMLInputElement;
   const serverPORT = document.getElementById('server-PORT') as HTMLInputElement;
-  let ip: string = "localhost";
-  let port: string = "3001";
+  let ip: string = defaultIP;
+  let port: string = defaultPORT;
   
   if (!username || username.trim() === '') {
     alert('Please enter a username first!');
@@ -287,3 +297,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadCustomServers();
   setupRoomPreview();
 });
+
+(window as any).joinRoomCustom = (ip: string, port: string) => joinRoomCustom(ip, port);
+(window as any).defaultIP = defaultIP;
+(window as any).defaultPORT = defaultPORT;

@@ -6,7 +6,15 @@ import { parse } from 'node-html-parser'
 const IP = localStorage.getItem('serverip') || "localhost";
 const PORT = localStorage.getItem('serverport') || "3001"
 
-const socket = new WebSocket(`ws://${IP}:${PORT}/room`);
+let socket: WebSocket
+
+if (PORT === "443") {
+    socket = new WebSocket(`wss://${IP}/room`);
+} else {
+    socket = new WebSocket(`ws://${IP}:${PORT}/room`);
+}
+
+
 
 const filter = new Filter();
 
