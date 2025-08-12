@@ -17,7 +17,7 @@ let nextID = 1;
 
 let pingIntervalId = null;
 const PING_INTERVAL = 20000; // send every 20 seconds
-const PONG_TIMEOUT = 40000;  // close if no pong in 40 seconds
+const PONG_TIMEOUT = 120000; // close if no pong in 2 minutes
 
 function initializePingSystem() {
 	if (pingIntervalId) clearInterval(pingIntervalId);
@@ -26,8 +26,9 @@ function initializePingSystem() {
 		const now = Date.now();
 
 		for (const client of roomClients) {
-			if (now - client.userData.lastPong > PONG_TIMEOUT) {
-				console.log(`Client ${client.userData.id} (${client.userData.username}) timed out`);
+			const timeSinceLastPong = now - client.userData.lastPong;
+			if (timeSinceLastPong > PONG_TIMEOUT) {
+				console.log(`Client ${client.userData.id} (${client.userData.username}) timed out after ${Math.round(timeSinceLastPong / 1000)}s of no response`);
 				client.close();
 				continue;
 			}
@@ -265,7 +266,7 @@ const app = uWS.App()
       }
 
       if (data.type === "hb") {
-        console.log("heartbeat recieved from client")
+        console.log(`Heartbeat received from client ${ws.userData.id} (${ws.userData.username})`);
         ws.userData.lastPong = Date.now();
         return;
       }
@@ -276,14 +277,21 @@ const app = uWS.App()
     close: (ws) => {
       const id = ws.userData.id;
       const username = ws.userData.username || "Anon";
+      
+      console.log(`Client ${id} (${username}) disconnected`);
       roomClients.delete(ws);
       
       for (const client of roomClients) {
-        client.send(encodeMessage("playerLeft", { 
-          id: id,
-          username: username,
-          playerCount: roomClients.size
-        }))
+        try {
+          client.send(encodeMessage("playerLeft", { 
+            id: id,
+            username: username,
+            playerCount: roomClients.size
+          }));
+        } catch (error) {
+          console.error(`Error notifying client of disconnect: ${error}`);
+          roomClients.delete(client);
+        }
       }
       
       broadcastToPreviewClients('roomActivity', `${username} left the room`)

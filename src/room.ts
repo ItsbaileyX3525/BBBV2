@@ -7,68 +7,42 @@ const IP = localStorage.getItem('serverip') || __SERVER_IP__;
 const PORT = localStorage.getItem('serverport') || __SERVER_PORT__;
 
 let socket: WebSocket
-let pingInterval: NodeJS.Timeout | null = null;
 let heartbeatInterval: NodeJS.Timeout | null = null;
-let pongTimeout: NodeJS.Timeout | null = null;
-let isConnected: boolean = false;
+let previousUserID: number | undefined = undefined; // Track previous ID for cleanup
 
 function deletePlayers(): void {
     const gameArea = document.getElementById('game-area') as HTMLElement;
-    var children = gameArea.children
-
-    for (var i = 0; i < children.length; i++) {
-        var child = children[i]
-
-        child.remove()
-    }
+    if (!gameArea) return;
+    
+    const playerElements = gameArea.querySelectorAll('[id^="player-"]');
+    playerElements.forEach(element => element.remove());
+    
+    const messageBubbles = gameArea.querySelectorAll('.message-bubble');
+    messageBubbles.forEach(bubble => bubble.remove());
+    
+    otherPlayersMovement.clear();
+    
+    console.log('Cleaned up all player elements and message bubbles');
 }
 
 function startPingInterval() {
-    if (pingInterval) {
-        clearInterval(pingInterval);
-    }
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
     }
     
+    // Only use the server heartbeat system - no client-side pings
     heartbeatInterval = setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN) {
-            console.log("Sending heartbeat to server");
+            console.log(`Sending heartbeat to server at ${new Date().toLocaleTimeString()}`);
             socket.send(JSON.stringify({ type: "hb", ts: Date.now() }));
         }
     }, 20000);
-    
-    pingInterval = setInterval(() => {
-        if (socket && socket.readyState === WebSocket.OPEN && isConnected) {
-            console.log("Sending ping to server");
-            socket.send(encodeMessage("ping", { timestamp: Date.now() }));
-            
-            if (pongTimeout) {
-                clearTimeout(pongTimeout);
-            }
-            
-            pongTimeout = setTimeout(() => {
-                console.warn('Pong timeout - no response received, closing connection');
-                if (socket) {
-                    socket.close();
-                }
-            }, 10000);
-        }
-    }, 30000);
 }
 
 function stopPingInterval() {
-    if (pingInterval) {
-        clearInterval(pingInterval);
-        pingInterval = null;
-    }
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
         heartbeatInterval = null;
-    }
-    if (pongTimeout) {
-        clearTimeout(pongTimeout);
-        pongTimeout = null;
     }
 }
 
@@ -80,7 +54,6 @@ function connect() {
     }
 
     socket.onopen = () => {
-        isConnected = true;
         startPingInterval();
         
         socket.send(encodeMessage("joinRoom", { 
@@ -93,7 +66,6 @@ function connect() {
 
     socket.onclose = (event) => {
         console.log('Disconnected, attempting to reconnect...', event);
-        isConnected = false;
         stopPingInterval();
         
         if (window.userID) {
@@ -108,7 +80,6 @@ function connect() {
 
     socket.onerror = (error) => {
         console.error('WebSocket error:', error);
-        isConnected = false;
         stopPingInterval();
         socket.close();
     };
@@ -688,6 +659,22 @@ const linked_functions: Record<string, (data: any) => void> = {
         updatePlayerCount(data.length);
     },
     assignID: (data: { id: number, playerCount: number }) => {
+        if (previousUserID !== undefined && previousUserID !== data.id) {
+            console.log(`Cleaning up previous player ID: ${previousUserID}`);
+            const oldPlayerDiv = document.getElementById(`player-${previousUserID}`);
+            if (oldPlayerDiv) {
+                oldPlayerDiv.remove();
+            }
+            otherPlayersMovement.delete(previousUserID);
+            
+            const oldBubble = document.querySelector(`.message-bubble[data-player-id="${previousUserID}"]`);
+            if (oldBubble) {
+                oldBubble.remove();
+            }
+        }
+        
+        previousUserID = window.userID;
+        
         window.userID = data.id;
         const username = localStorage.getItem("username") || "Anon";
         
@@ -711,12 +698,11 @@ const linked_functions: Record<string, (data: any) => void> = {
             socket.send(encodeMessage("pong", { timestamp: data.timestamp }));
         }
     },
-    pong: (data: { timestamp: number }) => {
-        if (pongTimeout) {
-            clearTimeout(pongTimeout);
-            pongTimeout = null;
+    hb: (_data: { ts: number }) => {
+        console.log(`Server heartbeat received at ${new Date().toLocaleTimeString()}, responding...`);
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "hb", ts: Date.now() }));
         }
-        console.log(`Pong received, round trip time: ${Date.now() - data.timestamp}ms`);
     }
 };
 
