@@ -321,6 +321,7 @@ function setupMovement() {
 function setupLeaveButton() {
     const leaveBtn = document.getElementById('leave-room-btn');
     leaveBtn?.addEventListener('click', () => {
+        socket.close()
         window.location.href = '/';
     });
 }
