@@ -5,7 +5,7 @@ const defaultPORT: string = "3001" //443 for https and whatever for anything els
 
 let previewSocket: WebSocket
 
-if (defaultPORT === "433") {
+if (defaultPORT === "443") {
   previewSocket = new WebSocket(`wss://${defaultIP}/preview`);
 } else {
   previewSocket = new WebSocket(`ws://${defaultIP}:${defaultPORT}/preview`);

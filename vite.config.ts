@@ -7,6 +7,7 @@ export default defineConfig(
         plugins: 
         [tailwindcss(),  ],
         build: {
+            sourcemap: true,
         rollupOptions: {
             input: {
                 main: 'index.html',
@@ -15,5 +16,7 @@ export default defineConfig(
                 },
             },
         },
+        server: {
+        }
     }
 )
