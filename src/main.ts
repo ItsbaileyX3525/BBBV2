@@ -1,7 +1,7 @@
 import './style.css'
 
-const defaultIP: string = "localhost" //Change this to your server address/ip <--- localhost for development
-const defaultPORT: string = "3001" //443 for https and whatever for anything else <--- 3001 for development
+const defaultIP: string = __SERVER_IP__; // Use environment variable with fallback
+const defaultPORT: string = __SERVER_PORT__; // Use environment variable with fallback
 
 let previewSocket: WebSocket
 

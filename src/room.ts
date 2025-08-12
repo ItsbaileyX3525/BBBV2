@@ -3,14 +3,14 @@ import { Filter } from 'bad-words';
 import { emojiList } from './emojiList';
 import { parse } from 'node-html-parser'
 
-const IP = localStorage.getItem('serverip') || "localhost";
-const PORT = localStorage.getItem('serverport') || "3001"
+const IP = localStorage.getItem('serverip') || __SERVER_IP__;
+const PORT = localStorage.getItem('serverport') || __SERVER_PORT__;
 
 let socket: WebSocket
 let pingInterval: NodeJS.Timeout | null = null;
+let heartbeatInterval: NodeJS.Timeout | null = null;
 let pongTimeout: NodeJS.Timeout | null = null;
 let isConnected: boolean = false;
-let lastPongTime: number = Date.now();
 
 function deletePlayers(): void {
     const gameArea = document.getElementById('game-area') as HTMLElement;
@@ -27,21 +27,20 @@ function startPingInterval() {
     if (pingInterval) {
         clearInterval(pingInterval);
     }
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+    }
     
-    setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) {
+    heartbeatInterval = setInterval(() => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            console.log("Sending heartbeat to server");
             socket.send(JSON.stringify({ type: "hb", ts: Date.now() }));
         }
     }, 20000);
-
+    
     pingInterval = setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN && isConnected) {
-            if (Date.now() - lastPongTime > 35000) {
-                console.warn('No pong received recently, connection may be dead');
-                socket.close();
-                return;
-            }
-            
+            console.log("Sending ping to server");
             socket.send(encodeMessage("ping", { timestamp: Date.now() }));
             
             if (pongTimeout) {
@@ -49,7 +48,7 @@ function startPingInterval() {
             }
             
             pongTimeout = setTimeout(() => {
-                console.warn('Pong timeout - connection may be dead');
+                console.warn('Pong timeout - no response received, closing connection');
                 if (socket) {
                     socket.close();
                 }
@@ -62,6 +61,10 @@ function stopPingInterval() {
     if (pingInterval) {
         clearInterval(pingInterval);
         pingInterval = null;
+    }
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
     }
     if (pongTimeout) {
         clearTimeout(pongTimeout);
@@ -78,7 +81,6 @@ function connect() {
 
     socket.onopen = () => {
         isConnected = true;
-        lastPongTime = Date.now();
         startPingInterval();
         
         socket.send(encodeMessage("joinRoom", { 
@@ -710,7 +712,6 @@ const linked_functions: Record<string, (data: any) => void> = {
         }
     },
     pong: (data: { timestamp: number }) => {
-        lastPongTime = Date.now();
         if (pongTimeout) {
             clearTimeout(pongTimeout);
             pongTimeout = null;

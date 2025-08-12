@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start" : "tsc && vite build && node index.js",
+    "start": "tsc && vite build && node index.js",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -18,6 +18,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.11",
     "bad-words": "^4.0.0",
+    "dotenv": "^17.2.1",
     "node-html-parser": "^7.0.1",
     "tailwindcss": "^4.1.11",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0"

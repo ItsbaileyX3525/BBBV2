@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import uWS from 'uWebSockets.js';
 import fs from "fs";
 import path from 'path';
@@ -7,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const __base = path.join(__dirname, "/dist")
 
-const port = process.env.PORT || process.env.WEBSITES_PORT || 3001; //Change port to your server port
+const port = process.env.SERVER_PORT || process.env.PORT || process.env.WEBSITES_PORT || 3001;
 
 const roomClients = new Set()
 const previewClients = new Set()
@@ -264,6 +265,7 @@ const app = uWS.App()
       }
 
       if (data.type === "hb") {
+        console.log("heartbeat recieved from client")
         ws.userData.lastPong = Date.now();
         return;
       }
