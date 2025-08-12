@@ -49,3 +49,27 @@ The downside to all this performance is that you have to manually do a lot of th
 ## I want more features!!!
 
 Don't hesitate to add me on discord 'sirfrogster55' and suggest some ideas and I will implement them!
+
+# Installing on your local server
+
+Installing and setting up BBB for youself is really really simple!
+
+To start off clone this repo into your dir location 
+
+`git clone https://github.com/ItsbaileyX3525/BBBV2.git`
+
+After that you'll want to modify server.js and set the port to what your development port is.
+
+Open main.ts in src/main.ts and set your development ip (localhost most likely) and port
+
+Open main.ts and do the same thing
+
+BOOM! You have now made it so you can setup the BBB server and connect to it from your own machine, from here you can create modifications to the server and the client, maybe you want to add custom images to the player if then you can and to ensure that you can still connect to the main server any of the new commands like setting the skins just get ingnored for compatability! 
+
+Happy coding!
+
+# Opening a PR
+
+I love contributions! If you have a way to make this project better like maybe setting a dotenv file or improving server performance or even just adding new features do not hesitiate to open a pull request!
+
+I will review the pull request and if it works and there is nothing fishy, I will merge it for every on the main server to see!
