@@ -14,37 +14,36 @@ const previewClients = new Set()
 
 let nextID = 1;
 
-const PING_INTERVAL = 30000; //30 seconds
-const PONG_TIMEOUT = 45000; //45 seconds
 let pingIntervalId = null;
+const PING_INTERVAL = 20000; // send every 20 seconds
+const PONG_TIMEOUT = 40000;  // close if no pong in 40 seconds
 
 function initializePingSystem() {
-    if (pingIntervalId) {
-        clearInterval(pingIntervalId);
-    }
-    
-    pingIntervalId = setInterval(() => {
-        const now = Date.now();
-        
-        for (const client of roomClients) {
-            if (client.userData.lastPong && (now - client.userData.lastPong) > PONG_TIMEOUT) {
-                console.log(`Client ${client.userData.id} (${client.userData.username}) timed out`);
-                client.close();
-                continue;
-            }
-            
-            if (client.readyState === 1) {
-                try {
-                    client.send(encodeMessage('ping', { timestamp: now }));
-                    client.userData.lastPing = now;
-                } catch (error) {
-                    console.error('Error sending ping:', error);
-                    client.close();
-                }
-            }
-        }
-    }, PING_INTERVAL);
+	if (pingIntervalId) clearInterval(pingIntervalId);
+
+	pingIntervalId = setInterval(() => {
+		const now = Date.now();
+
+		for (const client of roomClients) {
+			if (now - client.userData.lastPong > PONG_TIMEOUT) {
+				console.log(`Client ${client.userData.id} (${client.userData.username}) timed out`);
+				client.close();
+				continue;
+			}
+
+			if (client.readyState === 1) {
+				try {
+					client.send(encodeMessage("hb", { ts: now }));
+					client.userData.lastPing = now;
+				} catch (error) {
+					console.error("Error sending heartbeat:", error);
+					client.close();
+				}
+			}
+		}
+	}, PING_INTERVAL);
 }
+
 
 initializePingSystem();
 
@@ -263,6 +262,13 @@ const app = uWS.App()
         ws.userData.lastPong = Date.now();
         return;
       }
+
+      if (data.type === "hb") {
+        ws.userData.lastPong = Date.now();
+        return;
+      }
+
+
     },
     
     close: (ws) => {

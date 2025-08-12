@@ -28,6 +28,12 @@ function startPingInterval() {
         clearInterval(pingInterval);
     }
     
+    setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "hb", ts: Date.now() }));
+        }
+    }, 20000);
+
     pingInterval = setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN && isConnected) {
             if (Date.now() - lastPongTime > 35000) {
