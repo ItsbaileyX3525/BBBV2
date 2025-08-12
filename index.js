@@ -13,41 +13,43 @@ const port = process.env.SERVER_PORT || process.env.PORT || process.env.WEBSITES
 const roomClients = new Set()
 const previewClients = new Set()
 
+const ipConnectionCounts = new Map();
+const ipConnectionAttempts = new Map();
+
+const MAX_GLOBAL_CONNECTIONS = parseInt(process.env.MAX_GLOBAL_CONNECTIONS || '500');
+const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP || '5');
+const MAX_CONNECTION_ATTEMPTS_PER_IP = parseInt(process.env.MAX_CONNECTION_ATTEMPTS_PER_IP || '30');
+const CONNECTION_ATTEMPT_WINDOW_MS = parseInt(process.env.CONNECTION_ATTEMPT_WINDOW_MS || '60000'); // 1 minute window
+// Heartbeat configuration (server-initiated pings)
+const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '25000'); // how often to send ping
+const CLIENT_TIMEOUT_MS = parseInt(process.env.CLIENT_TIMEOUT_MS || '55000'); // time since last pong before disconnect
+
+function pruneAndCountAttempts(ip, now){
+  let arr = ipConnectionAttempts.get(ip) || [];
+  arr = arr.filter(ts => now - ts < CONNECTION_ATTEMPT_WINDOW_MS);
+  arr.push(now);
+  ipConnectionAttempts.set(ip, arr);
+  return arr.length;
+}
+
+function canAcceptConnection(ip, now){
+  if (roomClients.size >= MAX_GLOBAL_CONNECTIONS) {
+    return { ok: false, code: 503, reason: `Server full (>${MAX_GLOBAL_CONNECTIONS})` };
+  }
+  const current = ipConnectionCounts.get(ip) || 0;
+  if (current >= MAX_CONNECTIONS_PER_IP) {
+    return { ok: false, code: 429, reason: `Per-IP connection limit reached (${MAX_CONNECTIONS_PER_IP})` };
+  }
+  const attemptCount = pruneAndCountAttempts(ip, now);
+  if (attemptCount > MAX_CONNECTION_ATTEMPTS_PER_IP) {
+    return { ok: false, code: 429, reason: `Too many connection attempts (${attemptCount}/${MAX_CONNECTION_ATTEMPTS_PER_IP}) in window` };
+  }
+  return { ok: true };
+}
+
 let nextID = 1;
 
 let pingIntervalId = null;
-const PING_INTERVAL = 20000; // send every 20 seconds
-const PONG_TIMEOUT = 120000; // close if no pong in 2 minutes
-
-function initializePingSystem() {
-	if (pingIntervalId) clearInterval(pingIntervalId);
-
-	pingIntervalId = setInterval(() => {
-		const now = Date.now();
-
-		for (const client of roomClients) {
-			const timeSinceLastPong = now - client.userData.lastPong;
-			if (timeSinceLastPong > PONG_TIMEOUT) {
-				console.log(`Client ${client.userData.id} (${client.userData.username}) timed out after ${Math.round(timeSinceLastPong / 1000)}s of no response`);
-				client.close();
-				continue;
-			}
-
-			if (client.readyState === 1) {
-				try {
-					client.send(encodeMessage("hb", { ts: now }));
-					client.userData.lastPing = now;
-				} catch (error) {
-					console.error("Error sending heartbeat:", error);
-					client.close();
-				}
-			}
-		}
-	}, PING_INTERVAL);
-}
-
-
-initializePingSystem();
 
 function encodeMessage(type, message) {
     return JSON.stringify({ type: type, message: message })
@@ -155,8 +157,35 @@ const app = uWS.App()
   })
 
   .ws('/room', {
+    upgrade: (res, req, context) => {
+      const now = Date.now();
+      let ip;
+      try {
+        ip = Buffer.from(res.getRemoteAddressAsText()).toString();
+      } catch {
+        ip = 'unknown';
+      }
+
+      const verdict = canAcceptConnection(ip, now);
+      if (!verdict.ok) {
+        res.writeStatus(`${verdict.code} ${verdict.code === 429 ? 'Too Many Requests' : 'Service Unavailable'}`)
+          .writeHeader('Connection', 'close')
+          .end(verdict.reason);
+        return;
+      }
+
+      res.upgrade(
+        { ip },
+        req.getHeader('sec-websocket-key'),
+        req.getHeader('sec-websocket-protocol'),
+        req.getHeader('sec-websocket-extensions'),
+        context
+      );
+    },
     open: (ws) => {
       const now = Date.now();
+      const ip = ws.ip || 'unknown';
+      ipConnectionCounts.set(ip, (ipConnectionCounts.get(ip) || 0) + 1);
       ws.userData = {
         id: nextID++,
         username: "Anon",
@@ -166,7 +195,8 @@ const app = uWS.App()
         closed: false,
         lastPong: now,
         lastPing: now,
-        connectedAt: now
+        connectedAt: now,
+        ip
       };
       roomClients.add(ws)
       
@@ -191,6 +221,40 @@ const app = uWS.App()
       
       try {
         if (data.type == "joinRoom") {
+          const incomingSession = data.message?.sessionId;
+          if (incomingSession) {
+            ws.userData.sessionId = incomingSession;
+            const duplicates = [];
+            for (const client of roomClients) {
+              if (client !== ws && client.userData.sessionId && client.userData.sessionId === incomingSession) {
+                duplicates.push(client);
+              }
+            }
+            for (const dup of duplicates) {
+              try {
+                for (const other of roomClients) {
+                  if (other !== dup && other !== ws) {
+                    try {
+                      other.send(encodeMessage("playerLeft", {
+                        id: dup.userData.id,
+                        username: dup.userData.username,
+                        playerCount: roomClients.size - 1 // tentative count after removal
+                      }));
+                    } catch {}
+                  }
+                }
+                roomClients.delete(dup);
+                try { dup.end(4001, 'Replaced by new session connection'); } catch {}
+                console.log(`Replaced stale connection for session ${incomingSession} (old id ${dup.userData.id} -> new id ${ws.userData.id})`);
+              } catch (dupErr) {
+                console.error('Error replacing duplicate session connection:', dupErr);
+              }
+            }
+            if (duplicates.length) {
+              broadcastToPreviewClients('playerCount', roomClients.size);
+              broadcastToPreviewClients('previewPlayers', getRoomStats().players);
+            }
+          }
           ws.userData.username = data.message?.username || "Anon";
           
           for (const client of roomClients) {
@@ -316,9 +380,14 @@ const app = uWS.App()
     close: (ws) => {
       const id = ws.userData.id;
       const username = ws.userData.username || "Anon";
+      const ip = ws.userData.ip || 'unknown';
       
       console.log(`Client ${id} (${username}) disconnected`);
       roomClients.delete(ws);
+      if (ipConnectionCounts.has(ip)) {
+        const next = (ipConnectionCounts.get(ip) || 1) - 1;
+        if (next <= 0) ipConnectionCounts.delete(ip); else ipConnectionCounts.set(ip, next);
+      }
       
       for (const client of roomClients) {
         try {
@@ -359,6 +428,34 @@ const app = uWS.App()
 app.listen('0.0.0.0', port, (token) => {
   if (token) {
     console.log(`Server listening on http://0.0.0.0:${port}`)
+    if (!pingIntervalId) {
+      pingIntervalId = setInterval(() => {
+        const now = Date.now();
+        let removed = false;
+        for (const ws of roomClients) {
+          try {
+            const last = ws.userData.lastPong || ws.userData.connectedAt || now;
+            if (now - last > CLIENT_TIMEOUT_MS) {
+              try { ws.end(4000, 'Heartbeat timeout'); } catch {}
+              roomClients.delete(ws);
+              removed = true;
+              console.log(`Heartbeat timeout for client ${ws.userData.id} (${ws.userData.username})`);
+              continue;
+            }
+            ws.userData.lastPing = now;
+            ws.send(encodeMessage('ping', { timestamp: now }));
+          } catch (e) {
+            console.error('Error during heartbeat for client', ws.userData?.id, e);
+            roomClients.delete(ws);
+            removed = true;
+          }
+        }
+        if (removed) {
+            broadcastToPreviewClients('playerCount', roomClients.size);
+            broadcastToPreviewClients('previewPlayers', getRoomStats().players);
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+    }
   } else {
     console.log(`Failed to start server on port ${port}`)
     process.exit(1)

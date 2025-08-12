@@ -79,9 +79,15 @@ function connect() {
             startPingInterval();
             
             const username = localStorage.getItem("username") || "Anon";
+            let sessionId = localStorage.getItem('bb_session_id');
+            if (!sessionId) {
+                sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+                localStorage.setItem('bb_session_id', sessionId);
+            }
             const joinMessage = {
                 username: username,
-                message: `Hi, I've joined from ${getUserAgent()}`
+                message: `Hi, I've joined from ${getUserAgent()}`,
+                sessionId
             };
             
             socket.send(encodeMessage("joinRoom", joinMessage));
@@ -106,8 +112,6 @@ function connect() {
                     console.error('Error showing reconnect message:', error);
                 }
             }
-            
-
             setTimeout(() => {
                 connect();
             }, 2000);
@@ -296,6 +300,9 @@ function setupChat() {
         if (event.key === 'Enter' && mainChatInput.value.trim()) {
             if (!socket || socket.readyState !== WebSocket.OPEN) {
                 console.error('Socket not connected, cannot send message');
+                if (socket.readyState === WebSocket.CLOSED) {
+                    connect();
+                }
                 return;
             }
             
@@ -314,14 +321,31 @@ function setupChat() {
             }
             
             try {
-                socket.send(encodeMessage('chatMessage', {
+                const messageToSend = encodeMessage('chatMessage', {
                     message: reconstructedMessage.trimStart().trimEnd(),
                     username: localStorage.getItem("username") || "Anon"
-                }));
+                });
+                
+                socket.send(messageToSend);
                 mainChatInput.value = '';
                 mainChatInput.blur();
             } catch (error) {
                 console.error('Error sending chat message:', error);
+                // Store the message for retry
+                const failedMessage = mainChatInput.value;
+                setTimeout(() => {
+                    if (socket && socket.readyState === WebSocket.OPEN && failedMessage) {
+                        try {
+                            socket.send(encodeMessage('chatMessage', {
+                                message: reconstructedMessage.trimStart().trimEnd(),
+                                username: localStorage.getItem("username") || "Anon"
+                            }));
+                            console.log('Retry message sent successfully');
+                        } catch (retryError) {
+                            console.error('Retry failed:', retryError);
+                        }
+                    }
+                }, 1000);
             }
         }
     });
@@ -334,9 +358,30 @@ function setupMovement() {
     }
 
     document.addEventListener('keydown', (event) => {
+        const key = event.key.toLowerCase();
+        
+        // Handle Enter key to focus/unfocus chat input
+        if (event.key === 'Enter') {
+            const mainChatInput = document.getElementById('main-chat-input') as HTMLInputElement;
+            if (!isTyping()) {
+                event.preventDefault();
+                mainChatInput.focus();
+                return;
+            } else if (event.target === mainChatInput && !mainChatInput.value.trim()) {
+                event.preventDefault();
+                mainChatInput.blur();
+                return;
+            }
+        }
+        
+        if (event.key === 'Escape' && isTyping()) {
+            const activeElement = document.activeElement as HTMLElement;
+            activeElement.blur();
+            return;
+        }
+        
         if (isTyping()) return;
         
-        const key = event.key.toLowerCase();
         if (['w', 'a', 's', 'd'].includes(key)) {
             event.preventDefault();
             keysPressed.add(key);
@@ -357,10 +402,9 @@ function setupMovement() {
         
         const frameMovementSpeed = baseMovementSpeed * deltaTime;
         
+        // Clear movement keys when typing, but don't prevent movement updates for other players
         if (isTyping()) {
             keysPressed.clear();
-            requestAnimationFrame(movePlayer);
-            return;
         }
 
         let moved = false;
@@ -368,33 +412,39 @@ function setupMovement() {
         let moveX = 0;
         let moveY = 0;
         const gameArea = document.getElementById('game-area');
-        if (!gameArea) return;
-
-        if (keysPressed.has('w')) {
-            moveY = -1;
-        }
-        if (keysPressed.has('s')) {
-            moveY = 1;
-        }
-        if (keysPressed.has('a')) {
-            moveX = -1;
-            currentDirection = 'left';
-        }
-        if (keysPressed.has('d')) {
-            moveX = 1;
-            currentDirection = 'right';
+        if (!gameArea) {
+            requestAnimationFrame(movePlayer);
+            return;
         }
 
-        if (moveX !== 0 && moveY !== 0) {
-            const magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
-            moveX /= magnitude;
-            moveY /= magnitude;
-        }
+        // Only process movement input if not typing
+        if (!isTyping()) {
+            if (keysPressed.has('w')) {
+                moveY = -1;
+            }
+            if (keysPressed.has('s')) {
+                moveY = 1;
+            }
+            if (keysPressed.has('a')) {
+                moveX = -1;
+                currentDirection = 'left';
+            }
+            if (keysPressed.has('d')) {
+                moveX = 1;
+                currentDirection = 'right';
+            }
 
-        if (moveX !== 0 || moveY !== 0) {
-            moved = true;
-            targetX = Math.max(PLAYER_SIZE/2, Math.min(BASE_WIDTH - PLAYER_SIZE/2, targetX + moveX * frameMovementSpeed));
-            targetY = Math.max(PLAYER_SIZE/2, Math.min(BASE_HEIGHT - PLAYER_SIZE/2, targetY + moveY * frameMovementSpeed));
+            if (moveX !== 0 && moveY !== 0) {
+                const magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
+                moveX /= magnitude;
+                moveY /= magnitude;
+            }
+
+            if (moveX !== 0 || moveY !== 0) {
+                moved = true;
+                targetX = Math.max(PLAYER_SIZE/2, Math.min(BASE_WIDTH - PLAYER_SIZE/2, targetX + moveX * frameMovementSpeed));
+                targetY = Math.max(PLAYER_SIZE/2, Math.min(BASE_HEIGHT - PLAYER_SIZE/2, targetY + moveY * frameMovementSpeed));
+            }
         }
 
         if (currentDirection !== lastDirection && window.userID !== undefined) {
@@ -464,7 +514,14 @@ function addChatMessage(username: string, message: string) {
     if (chatMessages) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'mb-1';
-        messageDiv.innerHTML = `<span class="text-blue-300">${username}:</span> ${message}`;
+        
+        // Apply profanity filter to chat history if enabled
+        let filteredMessage = message;
+        if (localStorage.getItem("childMode")) {
+            filteredMessage = filter.clean(message);
+        }
+        
+        messageDiv.innerHTML = `<span class="text-blue-300">${username}:</span> ${filteredMessage}`;
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
@@ -851,6 +908,37 @@ function loadEmojis(): void {
     }
 }
 
+function recensorChatHistory() {
+    const chatMessages = document.getElementById('chat-messages');
+    if (!chatMessages) return;
+    
+    const messageElements = chatMessages.querySelectorAll('div.mb-1');
+    messageElements.forEach(messageDiv => {
+        const innerHTML = messageDiv.innerHTML;
+        const usernameMatch = innerHTML.match(/^<span class="text-blue-300">(.*?):<\/span> (.*)$/);
+        
+        if (usernameMatch) {
+            const username = usernameMatch[1];
+            const originalMessage = usernameMatch[2];
+            
+            // Remove HTML tags for filtering but preserve structure for display
+            const textContent = originalMessage.replace(/<[^>]*>/g, '');
+            
+            let filteredMessage = originalMessage;
+            if (localStorage.getItem("childMode")) {
+                // Apply profanity filter to text content and reconstruct HTML
+                const filteredText = filter.clean(textContent);
+                // If the text was changed, replace it in the message
+                if (filteredText !== textContent) {
+                    filteredMessage = originalMessage.replace(textContent, filteredText);
+                }
+            }
+            
+            messageDiv.innerHTML = `<span class="text-blue-300">${username}:</span> ${filteredMessage}`;
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     initializeRoom()
 	const cache = await caches.open('audio-cache-v1');
@@ -869,6 +957,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             localStorage.setItem("childMode", "ThisValueCanBeWhateverIWantItToBe")
         }
         
+        recensorChatHistory();
     })
     loadEmojis()
 
