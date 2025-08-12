@@ -7,6 +7,10 @@ const IP = localStorage.getItem('serverip') || "localhost";
 const PORT = localStorage.getItem('serverport') || "3001"
 
 let socket: WebSocket
+let pingInterval: NodeJS.Timeout | null = null;
+let pongTimeout: NodeJS.Timeout | null = null;
+let isConnected: boolean = false;
+let lastPongTime: number = Date.now();
 
 function deletePlayers(): void {
     const gameArea = document.getElementById('game-area') as HTMLElement;
@@ -19,6 +23,46 @@ function deletePlayers(): void {
     }
 }
 
+function startPingInterval() {
+    if (pingInterval) {
+        clearInterval(pingInterval);
+    }
+    
+    pingInterval = setInterval(() => {
+        if (socket && socket.readyState === WebSocket.OPEN && isConnected) {
+            if (Date.now() - lastPongTime > 35000) {
+                console.warn('No pong received recently, connection may be dead');
+                socket.close();
+                return;
+            }
+            
+            socket.send(encodeMessage("ping", { timestamp: Date.now() }));
+            
+            if (pongTimeout) {
+                clearTimeout(pongTimeout);
+            }
+            
+            pongTimeout = setTimeout(() => {
+                console.warn('Pong timeout - connection may be dead');
+                if (socket) {
+                    socket.close();
+                }
+            }, 10000);
+        }
+    }, 30000);
+}
+
+function stopPingInterval() {
+    if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+    }
+    if (pongTimeout) {
+        clearTimeout(pongTimeout);
+        pongTimeout = null;
+    }
+}
+
 function connect() {
     if (PORT === "443") {
         socket = new WebSocket(`wss://${IP}/room`);
@@ -27,6 +71,10 @@ function connect() {
     }
 
     socket.onopen = () => {
+        isConnected = true;
+        lastPongTime = Date.now();
+        startPingInterval();
+        
         socket.send(encodeMessage("joinRoom", { 
             username: localStorage.getItem("username") || "Anon", 
             message: `Hi, I've joined from ${getUserAgent()}`
@@ -37,16 +85,23 @@ function connect() {
 
     socket.onclose = (event) => {
         console.log('Disconnected, attempting to reconnect...', event);
+        isConnected = false;
+        stopPingInterval();
+        
         if (window.userID) {
             showMessageAbovePlayer(window.userID, "Socket failed (stupid js), reconnecting!")
         }
         deletePlayers()
 
-        connect()
+        setTimeout(() => {
+            connect()
+        }, 2000);
     };
 
     socket.onerror = (error) => {
         console.error('WebSocket error:', error);
+        isConnected = false;
+        stopPingInterval();
         socket.close();
     };
 }
@@ -642,6 +697,19 @@ const linked_functions: Record<string, (data: any) => void> = {
             y: playerY,
             username: username
         }));
+    },
+    ping: (data: { timestamp: number }) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(encodeMessage("pong", { timestamp: data.timestamp }));
+        }
+    },
+    pong: (data: { timestamp: number }) => {
+        lastPongTime = Date.now();
+        if (pongTimeout) {
+            clearTimeout(pongTimeout);
+            pongTimeout = null;
+        }
+        console.log(`Pong received, round trip time: ${Date.now() - data.timestamp}ms`);
     }
 };
 

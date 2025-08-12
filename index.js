@@ -14,6 +14,40 @@ const previewClients = new Set()
 
 let nextID = 1;
 
+const PING_INTERVAL = 30000; //30 seconds
+const PONG_TIMEOUT = 45000; //45 seconds
+let pingIntervalId = null;
+
+function initializePingSystem() {
+    if (pingIntervalId) {
+        clearInterval(pingIntervalId);
+    }
+    
+    pingIntervalId = setInterval(() => {
+        const now = Date.now();
+        
+        for (const client of roomClients) {
+            if (client.userData.lastPong && (now - client.userData.lastPong) > PONG_TIMEOUT) {
+                console.log(`Client ${client.userData.id} (${client.userData.username}) timed out`);
+                client.close();
+                continue;
+            }
+            
+            if (client.readyState === 1) {
+                try {
+                    client.send(encodeMessage('ping', { timestamp: now }));
+                    client.userData.lastPing = now;
+                } catch (error) {
+                    console.error('Error sending ping:', error);
+                    client.close();
+                }
+            }
+        }
+    }, PING_INTERVAL);
+}
+
+initializePingSystem();
+
 function encodeMessage(type, message) {
     return JSON.stringify({ type: type, message: message })
 }
@@ -121,13 +155,17 @@ const app = uWS.App()
 
   .ws('/room', {
     open: (ws) => {
+      const now = Date.now();
       ws.userData = {
         id: nextID++,
         username: "Anon",
         x: 200,
         y: 200,
         direction: 'right',
-        closed: false
+        closed: false,
+        lastPong: now,
+        lastPing: now,
+        connectedAt: now
       };
       roomClients.add(ws)
       
@@ -211,6 +249,20 @@ const app = uWS.App()
         }
         return;
       }
+      
+      if (data.type == "ping") {
+        try {
+          ws.send(encodeMessage('pong', { timestamp: data.message.timestamp }));
+        } catch (error) {
+          console.error('Error sending pong:', error);
+        }
+        return;
+      }
+      
+      if (data.type == "pong") {
+        ws.userData.lastPong = Date.now();
+        return;
+      }
     },
     
     close: (ws) => {
@@ -256,4 +308,20 @@ app.listen('0.0.0.0', port, (token) => {
     console.log(`Failed to start server on port ${port}`)
     process.exit(1)
   }
+});
+
+process.on('SIGINT', () => {
+  console.log('Shutting down server...');
+  if (pingIntervalId) {
+    clearInterval(pingIntervalId);
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Shutting down server...');
+  if (pingIntervalId) {
+    clearInterval(pingIntervalId);
+  }
+  process.exit(0);
 });
