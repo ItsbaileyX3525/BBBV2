@@ -38,6 +38,12 @@ function getRoomStats() {
     }
 }
 
+// If you want the app to use https then use uWS.SLLApp()
+// and pass {
+//    key_file_name: "./origin.key",
+//    cert_file_name: "./origin.pem"
+//}
+// const app = uWS.SSLApp({key_file_name: "./origin.key",cert_file_name: "./origin.pem"})
 const app = uWS.App()
   .options('/*', (res, req) => {
     // Handle preflight requests
